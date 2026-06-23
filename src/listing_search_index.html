@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>1688 Listing Search</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="shortcut icon" href="/favicon.ico">
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Local Listing Browser</p>
+          <h1>Search every collected shop in one place.</h1>
+          <p class="lead">
+            This viewer indexes your manifest, CSV, and XLSX exports directly from the collection folders already in this
+            workspace, then lets you search titles, prices, IDs, and links with instant local filtering.
+          </p>
+        </div>
+        <div class="hero-side">
+          <div class="hero-actions">
+            <button id="crawlerQueueButton" type="button" class="secondary-button">Collection Queue</button>
+            <button id="reindexImagesButton" type="button" class="secondary-button">Reindex Images</button>
+            <button id="reloadButton" type="button" class="primary-button">Reload Files</button>
+          </div>
+          <p class="status-text hero-status" id="statusText">Indexing current workspace...</p>
+          <div class="hero-stats" id="heroStats"></div>
+        </div>
+      </section>
+
+      <section class="controls-panel">
+        <div class="controls-row controls-row-search">
+          <label class="search-block">
+            <div class="control-label-row">
+              <span>Search</span>
+              <span class="search-commit-hint">Press Enter to search</span>
+            </div>
+            <div class="search-input-row">
+              <input
+                id="searchInput"
+                type="search"
+                autocomplete="off"
+                placeholder='Try smd transistor, "smd" !resistor, or sop8 OR qfn'
+              >
+              <button id="searchButton" type="button" class="primary-button">Search</button>
+              <span class="search-loading hidden" id="searchLoading" aria-live="polite">
+                <span class="search-spinner" aria-hidden="true"></span>
+                <span>Searching</span>
+              </span>
+            </div>
+            <div class="search-tools">
+              <input id="imageUploadInput" type="file" accept="image/*" hidden>
+              <button id="uploadImageButton" type="button" class="secondary-button">Upload Image</button>
+              <button id="pasteImageButton" type="button" class="secondary-button">Paste Image</button>
+              <button id="clearImageButton" type="button" class="secondary-button hidden">Clear Image</button>
+            </div>
+            <p class="search-status" id="imageSearchStatus">
+              Text search uses AND by default. Smart search also bridges part numbers like esp32 c3, esp32-c3, and esp32c3.
+            </p>
+            <details class="search-help">
+              <summary>Search Tips</summary>
+              <div class="search-help-body">
+                Press <code>Enter</code> or click <code>Search</code> to apply text changes.
+                AND is the default: <code>smd transistor</code>
+                OR: <code>sop8 OR qfn</code>
+                Exclude with <code>!term</code>: <code>"smd" !resistor</code>
+                Exact phrase: <code>"step down converter"</code>
+                Joined part numbers match across separators: <code>esp32 c3</code>, <code>esp32-c3</code>, <code>esp32c3</code>
+                Smart Search best-guesses close text matches. AI Title Search ranks titles, names, and part numbers with exact matches first.
+                Turn both off below if you want stricter results.
+                Saved prices are normalized to CNY internally, while the UI can display CNY, USD, or CAD.
+                Price filters use the currently selected currency display.
+              </div>
+            </details>
+            <div class="image-progress hidden" id="imageProgress">
+              <div class="image-progress-bar">
+                <div class="image-progress-fill" id="imageProgressFill"></div>
+              </div>
+              <div class="image-progress-meta">
+                <span id="imageProgressLabel">Preparing local image index...</span>
+                <span id="imageProgressNumbers"></span>
+              </div>
+            </div>
+          </label>
+        </div>
+
+        <div class="controls-row controls-row-filters">
+          <label class="control-block">
+            <span id="minPriceLabel">Min Cost (CNY)</span>
+            <input id="minPriceInput" type="number" min="0" step="0.01" placeholder="0.00">
+          </label>
+
+          <label class="control-block">
+            <span id="maxPriceLabel">Max Cost (CNY)</span>
+            <input id="maxPriceInput" type="number" min="0" step="0.01" placeholder="10.00">
+          </label>
+
+          <label class="control-block">
+            <span>Currency</span>
+            <select id="currencyFilter">
+              <option value="cny">CNY</option>
+              <option value="usd">USD</option>
+              <option value="cad">CAD</option>
+            </select>
+          </label>
+
+          <div class="control-block shop-control">
+            <span>Shop</span>
+            <button id="shopMenuButton" type="button" class="secondary-button shop-menu-button">Manage Shops</button>
+          </div>
+
+          <label class="control-block">
+            <span>Sort</span>
+            <select id="sortFilter">
+              <option value="match">Best match</option>
+              <option value="price-asc">Price: low to high</option>
+              <option value="price-desc">Price: high to low</option>
+              <option value="title">Title</option>
+              <option value="shop">Shop</option>
+            </select>
+          </label>
+
+          <label class="control-toggle">
+            <input id="hasImageFilter" type="checkbox">
+            <span>Only listings with images</span>
+          </label>
+
+          <label class="control-toggle">
+            <input id="smartSearchToggle" type="checkbox" checked>
+            <span>Smart Search</span>
+          </label>
+
+          <label class="control-toggle">
+            <input id="aiTextSearchToggle" type="checkbox">
+            <span>AI Title Search</span>
+          </label>
+        </div>
+
+      </section>
+
+      <section class="results-panel">
+        <div class="results-toolbar">
+          <div class="results-meta">
+            <strong id="resultSummary">Loading listings...</strong>
+            <span id="datasetSummary"></span>
+          </div>
+          <div class="error-banner hidden" id="errorBanner"></div>
+        </div>
+
+        <div class="results-scroll" id="resultsScroll">
+          <div class="results-loading hidden" id="resultsLoading" aria-live="polite">
+            <span class="results-spinner" aria-hidden="true"></span>
+            <span id="resultsLoadingText">Searching listings...</span>
+          </div>
+          <div class="results-grid" id="resultsGrid"></div>
+          <div class="empty-state hidden" id="emptyState">
+            <h2>No listings match the current search.</h2>
+            <p>Try a shorter query, switch the shop filter back to all, or reload if you added new collection files.</p>
+          </div>
+          <p class="load-hint" id="loadHint"></p>
+          <div class="load-actions">
+            <button id="browseMoreButton" type="button" class="secondary-button hidden">Show More Listings</button>
+          </div>
+          <div class="results-sentinel" id="resultsSentinel" aria-hidden="true"></div>
+        </div>
+      </section>
+    </main>
+
+    <div class="modal-shell hidden" id="shopMenuModal">
+      <div class="modal-backdrop" id="shopMenuBackdrop"></div>
+      <section class="modal-card shop-modal-card" aria-labelledby="shopMenuTitle" aria-modal="true" role="dialog">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Filters</p>
+            <h2 id="shopMenuTitle">Shops</h2>
+            <p class="modal-subtitle" id="shopPanelSummary">All shops active</p>
+          </div>
+          <button id="shopMenuClose" type="button" class="secondary-button">Close</button>
+        </div>
+        <div class="shop-panel">
+          <div class="shop-panel-head">
+            <input id="shopPanelSearch" type="search" autocomplete="off" placeholder="Search stores">
+            <div class="shop-panel-actions">
+              <button id="clearShopViewButton" type="button" class="secondary-button compact-button">View All</button>
+              <button id="enableAllShopsButton" type="button" class="secondary-button compact-button">All On</button>
+              <button id="disableAllShopsButton" type="button" class="secondary-button compact-button">All Off</button>
+              <button id="favoritesOnlyButton" type="button" class="secondary-button compact-button">Favorites On</button>
+            </div>
+          </div>
+          <div class="shop-table-wrap">
+            <table class="shop-table">
+              <thead>
+                <tr>
+                  <th>Store</th>
+                  <th>Listings</th>
+                  <th>Fav</th>
+                  <th>Active</th>
+                  <th>View</th>
+                  <th>Recrawl</th>
+                  <th>Delete</th>
+                </tr>
+              </thead>
+              <tbody id="shopList"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal-shell hidden" id="crawlerQueueModal">
+      <div class="modal-backdrop" id="crawlerQueueBackdrop"></div>
+      <section class="modal-card" aria-labelledby="crawlerQueueTitle" aria-modal="true" role="dialog">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Automation</p>
+            <h2 id="crawlerQueueTitle">Collection Queue</h2>
+          </div>
+          <button id="crawlerQueueClose" type="button" class="secondary-button">Close</button>
+        </div>
+        <p class="modal-lead">
+          Paste one Sugargoo seller/product URL, 1688 offer URL, Taobao item URL, or CSSBuy item URL per line. The queue opens a local
+          browser, resolves product listings to their seller page, collects the shop, saves a fresh
+          <code>manifest.json</code> plus images into <code>scraped data/&lt;shop&gt;</code>, and refreshes this browser
+          when each run completes. You can keep adding more URLs while the queue is already running. If Sugargoo
+          asks for sign-in, use the opened collection browser window once and the queue will continue automatically.
+        </p>
+        <div class="queue-editor">
+          <pre class="queue-line-numbers" id="crawlerQueueLineNumbers">1</pre>
+          <textarea
+            id="crawlerQueueInput"
+            spellcheck="false"
+            placeholder="https://item.taobao.com/item.htm?id=750882761332 or https://www.sugargoo.com/products?productLink=..."
+          ></textarea>
+        </div>
+        <div class="modal-actions">
+          <button id="crawlerQueueStart" type="button" class="primary-button">Add To Queue</button>
+          <p class="status-text" id="crawlerQueueMessage">Queue idle.</p>
+        </div>
+        <div class="queue-status" id="crawlerQueueStatus"></div>
+      </section>
+    </div>
+  </body>
+</html>
